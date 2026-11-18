@@ -1,0 +1,38 @@
+name: Release v0.1.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ripgrep for differential tests
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Compile and test
+        run: |
+          make
+          make test
+          cc -static -s -O2 -std=c11 -Wall -Wextra -Werror -pedantic \
+            -o dist/rg-grep-compat-linux-x86_64-static src/rg-grep-compat.c
+          bash tests/test.sh "$PWD/dist/rg-grep-compat-linux-x86_64-static"
+          sha256sum dist/rg-grep-compat-linux-x86_64-static
+      - name: Create release with tested static binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v0.1.0 release already exists; not overwriting' >&2
+            exit 1
+          fi
+          gh release create v0.1.0 dist/rg-grep-compat-linux-x86_64-static \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title 'rg-grep-compat v0.1.0' --notes-file RELEASE_NOTES.md
